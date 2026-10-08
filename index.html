@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>mig33 App - Chat & Gifting</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #eef2f5; padding: 20px; display: flex; justify-content: center; }
+        #chat-container { width: 100%; max-width: 420px; background: white; border-radius: 10px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #2c3e50; margin: 0; }
+        
+        #user-info { background: #f8f9fa; padding: 10px; border-radius: 6px; margin: 10px 0; display: flex; justify-content: space-between; font-weight: bold; }
+        .coin-balance { color: #f39c12; }
+
+        #messages { list-style-type: none; padding: 0; height: 260px; overflow-y: scroll; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px; }
+        #messages li { padding: 8px 12px; border-bottom: 1px solid #f1f1f1; }
+        .user-name { font-weight: bold; color: #3498db; }
+        .status-msg { font-style: italic; color: #7f8c8d; text-align: center; }
+        .gift-msg { background: #fff3cd; color: #856404; font-weight: bold; border-radius: 5px; text-align: center; }
+
+        form { display: flex; gap: 5px; margin-bottom: 10px; }
+        input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { background: #2ecc71; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        
+        .gift-section { display: flex; justify-content: space-around; background: #f1f3f5; padding: 8px; border-radius: 5px; }
+        .gift-btn { background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container">
+        <h2>mig33 Chat & Gifts 🎁</h2>
+        
+        <div id="user-info">
+            <span id="display-name">User: -</span>
+            <span class="coin-balance">🪙 Coins: <span id="coins">100</span></span>
+        </div>
+
+        <ul id="messages"></ul>
+        
+        <form id="form">
+            <input id="input" autocomplete="off" placeholder="मेसेज लेख्नुहोस्..." />
+            <button type="submit">पठाउनुहोस्</button>
+        </form>
+
+        <div class="gift-section">
+            <button class="gift-btn" onclick="sendGift('🌹 Rose', 10)">🌹 Rose (10 Coins)</button>
+            <button class="gift-btn" onclick="sendGift('👑 Crown', 50)">👑 Crown (50 Coins)</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        let username = prompt("आफ्नो नाम राख्नुहोस्:") || "Guest";
+        let coins = 100;
+
+        document.getElementById('display-name').textContent = "User: " + username;
+        socket.emit('joinUser', username);
+
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+
+        // म्यासेज पठाउने भाग
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (input.value.trim() !== '') {
+                socket.emit('chatMessage', { user: username, text: input.value });
+                input.value = '';
+            }
+        });
+
+        // उपहार (Gift) पठाउने भाग
+        function sendGift(giftName, cost) {
+            if (coins >= cost) {
+                coins -= cost;
+                document.getElementById('coins').textContent = coins;
+                socket.emit('sendGift', { user: username, gift: giftName, cost: cost });
+            } else {
+                alert("तपाईंसँग पर्याप्‍त Coins छैन!");
+            }
+        }
+
+        // म्यासेज देखाउने भाग (यहाँ document.createElement मिलाइएको छ)
+        socket.on('chatMessage', (data) => {
+            const item = document.createElement('li');
+            item.innerHTML = `<span class="user-name">${data.user}:</span> ${data.text}`;
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // उपहार पाएको देखाउने भाग
+        socket.on('giftBroadcast', (data) => {
+            const item = document.createElement('li');
+            item.className = 'gift-msg';
+            item.innerHTML = `🎁 <strong>${data.user}</strong> ले <strong>${data.gift}</strong> उपहार पठाउनुभयो!`;
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // मान्छे जोडिएको वा निस्किएको देखाउने भाग
+        socket.on('userStatus', (msg) => {
+            const item = document.createElement('li');
+            item.className = 'status-msg';
+            item.textContent = msg;
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+        });
+    </script>
+</body>
+</html>

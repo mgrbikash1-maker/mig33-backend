@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io Setup with full CORS access
+// Socket.io with full CORS setup
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -13,7 +13,7 @@ const io = new Server(server, {
   }
 });
 
-// Users and Rooms storage
+// User memory storage
 const activeUsers = new Map(); // socket.id -> username
 const roomUsers = new Map();   // roomName -> Set of socket.ids
 
@@ -22,25 +22,23 @@ app.get('/', (req, res) => {
   res.status(200).send('MIG KO BAU Backend Server is Live and Running 🚀');
 });
 
-// Socket.io Connection Logic
+// Socket Connections
 io.on('connection', (socket) => {
-  console.log(`[CONNECTED] New client connected: ${socket.id}`);
+  console.log(`[CONNECTED] Client: ${socket.id}`);
 
-  // 1. User Registration
+  // 1. Register User
   socket.on('registerUser', (username) => {
     if (!username) return;
     activeUsers.set(socket.id, username);
-    console.log(`[REGISTER] User registered: ${username} (${socket.id})`);
+    console.log(`[REGISTER] User: ${username} (${socket.id})`);
     
-    // Broadcast active online users
     io.emit('activeUsersList', Array.from(activeUsers.values()));
   });
 
-  // 2. Joining Chatroom
+  // 2. Join Chatroom
   socket.on('joinRoom', (roomName) => {
     const username = activeUsers.get(socket.id) || 'Guest';
 
-    // Leave previous rooms
     socket.rooms.forEach((room) => {
       if (room !== socket.id) {
         socket.leave(room);
@@ -50,16 +48,14 @@ io.on('connection', (socket) => {
       }
     });
 
-    // Join new room
     socket.join(roomName);
     if (!roomUsers.has(roomName)) {
       roomUsers.set(roomName, new Set());
     }
     roomUsers.get(roomName).add(socket.id);
 
-    console.log(`[JOIN ROOM] ${username} joined room: ${roomName}`);
+    console.log(`[JOIN] ${username} -> ${roomName}`);
 
-    // Welcome & System broadcast
     socket.emit('chatMessage', {
       user: 'System',
       text: `Welcome to ${roomName}, ${username}! 🇳🇵`,
@@ -73,12 +69,12 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 3. Room Chat Message
+  // 3. Room Message
   socket.on('roomMessage', (data) => {
     const { room, user, text } = data;
     if (!room || !text) return;
 
-    console.log(`[ROOM MSG] [${room}] ${user}: ${text}`);
+    console.log(`[MSG] [${room}] ${user}: ${text}`);
 
     io.to(room).emit('chatMessage', {
       user: user || 'Anonymous',
@@ -92,9 +88,6 @@ io.on('connection', (socket) => {
     const { fromUser, toUser, text } = data;
     if (!toUser || !text) return;
 
-    console.log(`[PM] From ${fromUser} to ${toUser}: ${text}`);
-
-    // Find recipient socket ID
     let targetSocketId = null;
     for (let [sId, uName] of activeUsers.entries()) {
       if (uName === toUser) {
@@ -104,14 +97,12 @@ io.on('connection', (socket) => {
     }
 
     if (targetSocketId) {
-      // Send to recipient
       io.to(targetSocketId).emit('privateMessage', {
         fromUser: fromUser,
         toUser: toUser,
         text: text
       });
 
-      // Send confirmation back to sender
       socket.emit('privateMessage', {
         fromUser: fromUser,
         toUser: toUser,
@@ -120,18 +111,16 @@ io.on('connection', (socket) => {
     } else {
       socket.emit('chatMessage', {
         user: 'System',
-        text: `User ${toUser} is currently offline.`,
+        text: `User ${toUser} is offline.`,
         isSystem: true
       });
     }
   });
 
-  // 5. Send Gifts
+  // 5. Gift Sending
   socket.on('sendGift', (data) => {
     const { room, user, gift } = data;
     if (!room || !gift) return;
-
-    console.log(`[GIFT] ${user} sent ${gift} in ${room}`);
 
     io.to(room).emit('giftBroadcast', {
       user: user,
@@ -139,21 +128,17 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 6. User Disconnect
+  // 6. Disconnect
   socket.on('disconnect', () => {
     const username = activeUsers.get(socket.id);
     if (username) {
-      console.log(`[DISCONNECTED] User left: ${username} (${socket.id})`);
       activeUsers.delete(socket.id);
-
-      // Update online users list
       io.emit('activeUsersList', Array.from(activeUsers.values()));
     }
   });
 });
 
-// Start Server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 MIG KO BAU Backend Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

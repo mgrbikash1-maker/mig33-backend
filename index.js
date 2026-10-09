@@ -13,70 +13,75 @@ const io = new Server(server, {
 });
 
 const activeUsers = new Map();
-const roomUsers = new Map();
 
-// Web Client UI (ब्राउजरबाट सिधै च्याट गर्नका लागि)
+// Web HTML Interface
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>MIG KO BAU - Web Chat</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <script src="/socket.io/socket.io.js"></script>
       <style>
-        body { font-family: Arial, sans-serif; background: #f9f9f9; margin: 0; padding: 20px; text-align: center; }
-        #chat-box { width: 100%; max-width: 500px; height: 350px; background: white; border: 1px solid #ccc; margin: 10px auto; overflow-y: auto; padding: 10px; border-radius: 8px; text-align: left; }
-        input, button { padding: 10px; font-size: 16px; margin: 5px; }
-        button { background: #ff4757; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        .msg { margin-bottom: 8px; }
-        .sys { color: gray; font-style: italic; }
+        body { font-family: sans-serif; background: #eef2f5; padding: 20px; text-align: center; }
+        #chat-card { max-width: 450px; margin: 0 auto; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #chat-box { height: 300px; border: 1px solid #ddd; overflow-y: auto; text-align: left; padding: 10px; margin-bottom: 10px; border-radius: 5px; background: #fafafa; }
+        input, button { padding: 10px; font-size: 15px; margin: 4px; border-radius: 5px; border: 1px solid #ccc; }
+        button { background: #e84118; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .msg-line { margin: 6px 0; }
+        .sys-line { color: #7f8c8d; font-style: italic; font-size: 13px; text-align: center; }
       </style>
     </head>
     <body>
-      <h2>🇳🇵 MIG KO BAU Web Chat Room</h2>
-      <div id="login-sec">
-        <input type="text" id="username" placeholder="User ID / Name">
-        <button onclick="login()">Enter Chat</button>
-      </div>
+      <div id="chat-card">
+        <h2>🇳🇵 MIG KO BAU Web Chat</h2>
+        
+        <div id="login-sec">
+          <input type="text" id="username" placeholder="आफ्नो नाम / User ID">
+          <button onclick="login()">Enter Chat 🚀</button>
+        </div>
 
-      <div id="chat-sec" style="display:none;">
-        <div id="chat-box"></div>
-        <input type="text" id="msg" placeholder="Write message...">
-        <button onclick="sendMsg()">Send</button>
+        <div id="chat-sec" style="display:none;">
+          <div id="chat-box"></div>
+          <div style="display:flex;">
+            <input type="text" id="msg" style="flex:1;" placeholder="मैसेज लेख्नुहोस्..." onkeypress="if(event.key==='Enter') sendMsg()">
+            <button onclick="sendMsg()">Send</button>
+          </div>
+        </div>
       </div>
 
       <script>
         let socket;
-        let username;
+        let uName;
 
         function login() {
-          username = document.getElementById('username').value.trim();
-          if(!username) return alert('Name लेख्नुहोस्!');
+          uName = document.getElementById('username').value.trim();
+          if(!uName) return alert('नाम लेख्नुहोस्!');
 
           socket = io();
           document.getElementById('login-sec').style.display = 'none';
           document.getElementById('chat-sec').style.display = 'block';
 
-          socket.emit('registerUser', username);
+          socket.emit('registerUser', uName);
           socket.emit('joinRoom', '🇳🇵 Nepal Lounge');
 
           socket.on('chatMessage', (data) => {
             const box = document.getElementById('chat-box');
-            const p = document.createElement('div');
-            p.className = data.isSystem ? 'msg sys' : 'msg';
-            p.innerHTML = '<b>' + data.user + ':</b> ' + data.text;
-            box.appendChild(p);
+            const div = document.createElement('div');
+            div.className = data.isSystem ? 'msg-line sys-line' : 'msg-line';
+            div.innerHTML = data.isSystem ? data.text : '<b>' + data.user + ':</b> ' + data.text;
+            box.appendChild(div);
             box.scrollTop = box.scrollHeight;
           });
         }
 
         function sendMsg() {
-          const input = document.getElementById('msg');
-          if(!input.value.trim()) return;
-          socket.emit('roomMessage', { room: '🇳🇵 Nepal Lounge', user: username, text: input.value });
-          input.value = '';
+          const inp = document.getElementById('msg');
+          const txt = inp.value.trim();
+          if(!txt) return;
+          socket.emit('roomMessage', { room: '🇳🇵 Nepal Lounge', user: uName, text: txt });
+          inp.value = '';
         }
       </script>
     </body>
@@ -84,7 +89,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Socket logic
+// Socket connection logic
 io.on('connection', (socket) => {
   socket.on('registerUser', (username) => {
     if (!username) return;
@@ -95,8 +100,8 @@ io.on('connection', (socket) => {
   socket.on('joinRoom', (roomName) => {
     const username = activeUsers.get(socket.id) || 'Guest';
     socket.join(roomName);
-    
-    socket.emit('chatMessage', { user: 'System', text: 'Welcome to ' + roomName + '!', isSystem: true });
+
+    socket.emit('chatMessage', { user: 'System', text: 'Welcome to ' + roomName + '! 🇳🇵', isSystem: true });
     socket.to(roomName).emit('chatMessage', { user: 'System', text: username + ' joined.', isSystem: true });
   });
 

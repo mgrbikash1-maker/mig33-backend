@@ -17,7 +17,7 @@ const messageHistory = {
   '🇳🇵 Nepal Lounge': []
 };
 
-// index.html फाइल नखोजेरै सोझै Web Chat UI देखाउने
+// index.html नखोजेरै सोझै HTML पठाउने (No ENOENT Error)
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>

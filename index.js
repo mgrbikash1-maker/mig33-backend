@@ -1,144 +1,82 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+// Static files (public फोल्डरका लागि)
+app.use(express.static(path.join(__dirname, 'public')));
 
-const activeUsers = new Map();
-const messageHistory = {
-  '🇳🇵 Nepal Lounge': []
-};
+// रुम अनुसार म्यासेज र युजर ट्र्याक गर्ने डेटा
+const roomMessages = {}; 
+const roomUsers = {};
 
-// index.html नखोजेरै सोझै HTML पठाउने (No ENOENT Error)
-app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>MIG KO BAU - Web Chat</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <script src="/socket.io/socket.io.js"></script>
-      <style>
-        body { font-family: sans-serif; background: #eef2f5; padding: 15px; text-align: center; margin: 0; }
-        #chat-card { max-width: 450px; margin: 20px auto; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        #chat-box { height: 300px; border: 1px solid #ddd; overflow-y: auto; text-align: left; padding: 10px; margin-bottom: 10px; border-radius: 5px; background: #fafafa; }
-        input, button { padding: 10px; font-size: 15px; margin: 4px; border-radius: 5px; border: 1px solid #ccc; }
-        button { background: #e84118; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .msg-line { margin: 6px 0; word-break: break-word; }
-        .sys-line { color: #7f8c8d; font-style: italic; font-size: 13px; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div id="chat-card">
-        <h2 style="color:#e84118;">🇳🇵 MIG KO BAU Web Chat</h2>
-        
-        <div id="login-sec">
-          <input type="text" id="username" placeholder="User ID / Name">
-          <button onclick="login()">Enter Chat 🚀</button>
-        </div>
-
-        <div id="chat-sec" style="display:none;">
-          <div id="chat-box"></div>
-          <div style="display:flex;">
-            <input type="text" id="msg" style="flex:1;" placeholder="मैसेज लेख्नुहोस्..." onkeypress="if(event.key==='Enter') sendMsg()">
-            <button onclick="sendMsg()">Send</button>
-          </div>
-        </div>
-      </div>
-
-      <script>
-        let socket;
-        let uName;
-
-        function login() {
-          uName = document.getElementById('username').value.trim();
-          if(!uName) return alert('नाम लेख्नुहोस्!');
-
-          socket = io();
-
-          socket.on('connect', () => {
-            document.getElementById('login-sec').style.display = 'none';
-            document.getElementById('chat-sec').style.display = 'block';
-            socket.emit('registerUser', uName);
-            socket.emit('joinRoom', '🇳🇵 Nepal Lounge');
-          });
-
-          socket.on('loadHistory', (history) => {
-            const box = document.getElementById('chat-box');
-            box.innerHTML = '';
-            history.forEach(data => appendMessage(data));
-          });
-
-          socket.on('chatMessage', (data) => {
-            appendMessage(data);
-          });
-        }
-
-        function appendMessage(data) {
-          const box = document.getElementById('chat-box');
-          const div = document.createElement('div');
-          div.className = data.isSystem ? 'msg-line sys-line' : 'msg-line';
-          div.innerHTML = data.isSystem ? data.text : '<b>' + data.user + ':</b> ' + data.text;
-          box.appendChild(div);
-          box.scrollTop = box.scrollHeight;
-        }
-
-        function sendMsg() {
-          const inp = document.getElementById('msg');
-          const txt = inp.value.trim();
-          if(!txt) return;
-          socket.emit('roomMessage', { room: '🇳🇵 Nepal Lounge', user: uName, text: txt });
-          inp.value = '';
-        }
-      </script>
-    </body>
-    </html>
-  `);
-});
-
-// Socket logic
 io.on('connection', (socket) => {
-  socket.on('registerUser', (username) => {
-    if (!username) return;
-    activeUsers.set(socket.id, username);
-    io.emit('activeUsersList', Array.from(activeUsers.values()));
-  });
+    console.log('A user connected:', socket.id);
 
-  socket.on('joinRoom', (roomName) => {
-    const username = activeUsers.get(socket.id) || 'Guest';
-    socket.join(roomName);
+    // रुम जोइन गर्ने
+    socket.on('join_room', ({ username, room }) => {
+        socket.join(room);
+        socket.username = username;
+        socket.room = room;
 
-    if (messageHistory[roomName]) {
-      socket.emit('loadHistory', messageHistory[roomName]);
-    }
+        // रुममा युजर थप्ने
+        if (!roomUsers[room]) roomUsers[room] = [];
+        roomUsers[room].push({ id: socket.id, username });
 
-    const sysMsg = { user: 'System', text: username + ' joined ' + roomName + '.', isSystem: true };
-    socket.to(roomName).emit('chatMessage', sysMsg);
-  });
+        // पुरानो म्यासेज पठाउने
+        if (!roomMessages[room]) roomMessages[room] = [];
+        socket.emit('load_messages', roomMessages[room]);
 
-  socket.on('roomMessage', (data) => {
-    const newMsg = { user: data.user, text: data.text, isSystem: false };
+        // अनलाइन युजर लिस्ट अपडेट पठाउने
+        io.to(room).emit('update_users', roomUsers[room]);
 
-    if (!messageHistory[data.room]) messageHistory[data.room] = [];
-    messageHistory[data.room].push(newMsg);
-    if (messageHistory[data.room].length > 100) messageHistory[data.room].shift();
+        // रुमका साथीहरूलाई जोइन भएको सूचना दिने
+        io.to(room).emit('chat_message', {
+            username: 'System',
+            message: `${username} has joined the room.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    });
 
-    io.to(data.room).emit('chatMessage', newMsg);
-  });
+    // नयाँ म्यासेज पठाउँदा
+    socket.on('chat_message', (data) => {
+        const { room, message, username } = data;
+        const chatData = {
+            username,
+            message,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
 
-  socket.on('disconnect', () => {
-    activeUsers.delete(socket.id);
-    io.emit('activeUsersList', Array.from(activeUsers.values()));
-  });
+        if (!roomMessages[room]) roomMessages[room] = [];
+        roomMessages[room].push(chatData);
+
+        // उक्त रुमका सबैलाई म्यासेज ब्रोडकास्ट गर्ने
+        io.to(room).emit('chat_message', chatData);
+    });
+
+    // डिस्कनेक्ट हुँदा
+    socket.on('disconnect', () => {
+        const { room, username } = socket;
+        if (room && username) {
+            if (roomUsers[room]) {
+                roomUsers[room] = roomUsers[room].filter(u => u.id !== socket.id);
+                io.to(room).emit('update_users', roomUsers[room]);
+            }
+            io.to(room).emit('chat_message', {
+                username: 'System',
+                message: `${username} has left the room.`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+        console.log('User disconnected:', socket.id);
+    });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server Live'));
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});

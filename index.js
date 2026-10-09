@@ -4,32 +4,67 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
-
-// index.html देखाउने
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+const io = new Server(server, {
+  cors: { origin: "*" }
 });
 
-// Real-time Chat Logic
+const activeUsers = {};
+
 io.on('connection', (socket) => {
+  console.log('Connected:', socket.id);
 
-    socket.on('joinUser', (username) => {
-        socket.username = username;
-        io.emit('userStatus', `📢 ${username} च्याटरूममा आउनुभयो!`);
-    });
+  // User ID Registration
+  socket.on('registerUser', (username) => {
+    socket.username = username;
+    activeUsers[username] = socket.id;
+    io.emit('activeUsersList', Object.keys(activeUsers));
+  });
 
-    socket.on('chatMessage', (data) => {
-        io.emit('chatMessage', data);
+  // Room Join (5 Chatrooms)
+  socket.on('joinRoom', (roomName) => {
+    Array.from(socket.rooms).forEach(r => {
+      if (r !== socket.id) socket.leave(r);
     });
+    socket.join(roomName);
+    socket.currentRoom = roomName;
 
-    socket.on('disconnect', () => {
-        if (socket.username) {
-            io.emit('userStatus', `🚪 ${socket.username} निस्कनुभयो।`);
-        }
+    io.to(roomName).emit('chatMessage', {
+      user: 'SYSTEM',
+      text: `👋 ${socket.username} ले ${roomName} मा स्वागत छ!`,
+      isSystem: true
     });
+  });
+
+  // Room Message
+  socket.on('roomMessage', (data) => {
+    io.to(data.room).emit('chatMessage', {
+      user: data.user,
+      text: data.text,
+      isSystem: false
+    });
+  });
+
+  // Private Message (PM)
+  socket.on('privateMessage', (data) => {
+    const targetSocketId = activeUsers[data.toUser];
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('privateMessage', data);
+      socket.emit('privateMessage', data);
+    }
+  });
+
+  // Send Gift
+  socket.on('sendGift', (data) => {
+    io.to(data.room).emit('giftBroadcast', data);
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.username) {
+      delete activeUsers[socket.username];
+      io.emit('activeUsersList', Object.keys(activeUsers));
+    }
+  });
 });
 
-server.listen(3000, () => {
-    console.log('Server तयार भयो! http://localhost:3000 मा हेर्नुहोस्।');
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`MIG KO BAU Server running on port ${PORT}`));

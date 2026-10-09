@@ -17,7 +17,7 @@ const messageHistory = {
   '🇳🇵 Nepal Lounge': []
 };
 
-// Chrome मा खोल्दा देखिने UI
+// index.html फाइल नखोजेरै सोझै Web Chat UI देखाउने
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>

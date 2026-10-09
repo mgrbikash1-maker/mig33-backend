@@ -4,6 +4,12 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+
+// Basic Route (Render/Browser को लागि simple response)
+app.get('/', (req, res) => {
+  res.send('MIG KO BAU Backend is Live & Running! 🚀');
+});
+
 const io = new Server(server, {
   cors: { origin: "*" }
 });
@@ -11,16 +17,16 @@ const io = new Server(server, {
 const activeUsers = {};
 
 io.on('connection', (socket) => {
-  console.log('Connected:', socket.id);
+  console.log('User Connected:', socket.id);
 
-  // User ID Registration
+  // 1. Register User / ID
   socket.on('registerUser', (username) => {
     socket.username = username;
     activeUsers[username] = socket.id;
     io.emit('activeUsersList', Object.keys(activeUsers));
   });
 
-  // Room Join (5 Chatrooms)
+  // 2. Join Chatroom (5 Chatrooms)
   socket.on('joinRoom', (roomName) => {
     Array.from(socket.rooms).forEach(r => {
       if (r !== socket.id) socket.leave(r);
@@ -35,7 +41,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Room Message
+  // 3. Room Chat Message
   socket.on('roomMessage', (data) => {
     io.to(data.room).emit('chatMessage', {
       user: data.user,
@@ -44,7 +50,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Private Message (PM)
+  // 4. Private Message (PM)
   socket.on('privateMessage', (data) => {
     const targetSocketId = activeUsers[data.toUser];
     if (targetSocketId) {
@@ -53,11 +59,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Send Gift
+  // 5. Send Gift
   socket.on('sendGift', (data) => {
     io.to(data.room).emit('giftBroadcast', data);
   });
 
+  // Disconnect
   socket.on('disconnect', () => {
     if (socket.username) {
       delete activeUsers[socket.username];
@@ -67,4 +74,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`MIG KO BAU Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
